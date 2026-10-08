@@ -1,0 +1,19 @@
+{
+  "name": "bshk",
+  "owner": {
+    "name": "Aleksandr Beshkenadze",
+    "email": "beshkenadze@gmail.com"
+  },
+  "metadata": {
+    "description": "Claude Code plugins from bshk — https://bshk.app"
+  },
+  "plugins": [
+    {
+      "name": "rech",
+      "source": "./plugins/rech",
+      "description": "Local speech recognition: dictate prompts by voice and transcribe recordings with Rech. GigaAM for Russian; audio never leaves the Mac.",
+      "category": "productivity",
+      "homepage": "https://tish.bshk.app"
+    }
+  ]
+}
