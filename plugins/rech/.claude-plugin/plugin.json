@@ -1,0 +1,40 @@
+{
+  "name": "rech",
+  "displayName": "Rech",
+  "version": "0.2.0",
+  "description": "Local speech recognition: dictate prompts by voice and transcribe recordings with Rech. GigaAM for Russian, the best model for each other language; audio never leaves the Mac.",
+  "author": {
+    "name": "Aleksandr Beshkenadze",
+    "email": "beshkenadze@gmail.com"
+  },
+  "homepage": "https://tish.bshk.app",
+  "license": "UNLICENSED",
+  "keywords": ["voice", "dictation", "speech-to-text", "transcription", "russian", "gigaam"],
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Dictation language",
+      "description": "The language you dictate in. It picks the model (GigaAM for Russian) and loads it while you speak, so the text is ready under a second after you stop. 'auto' detects it, but that needs 3 s of speech and takes seconds longer; shorter phrases go to Parakeet.",
+      "default": "auto",
+      "options": [
+        "auto", "ru", "en", "uk", "de", "fr", "es", "it", "pt", "pl", "nl", "cs", "sk",
+        "sv", "fi", "da", "el", "hu", "ro", "bg", "hr", "sl", "et", "lv", "lt",
+        "tr", "ar", "hi", "ja", "ko", "zh", "vi"
+      ]
+    },
+    "pause": {
+      "type": "number",
+      "title": "Pause that ends a phrase, seconds",
+      "description": "How long you can be silent before dictation stops. Raise it if you get cut off mid-thought.",
+      "default": 1.5,
+      "min": 0.5,
+      "max": 10
+    },
+    "sounds": {
+      "type": "boolean",
+      "title": "Start and stop sounds",
+      "description": "Tink when the microphone opens, Pop when it closes.",
+      "default": true
+    }
+  }
+}

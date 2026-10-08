@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# rech-listen — one spoken phrase from the microphone, printed as text.
+#
+# A wrapper over `rech listen` for agents. rech records until you pause (a
+# voice-activity model decides what is speech) and transcribes the phrase on this
+# Mac with the model for its language: GigaAM for Russian. Nothing leaves the machine.
+#
+# stdout carries only the text. Exit codes: 0 text printed, 3 nothing heard,
+# 1 error. With --for-prompt (for a skill's !`…` line, whose stderr Claude Code
+# also inlines into the prompt): "nothing heard" and errors are printed to stdout
+# as a bracketed note, the exit code is 0, and diagnostics go to
+# ~/Library/Logs/rech-listen.log instead of stderr.
+#
+# Usage: rech-listen [--for-prompt] [--language L] [--pause S] [--sounds true|false]
+#                    [--device NAME] [--data DIR] [other `rech listen` options…]
+#
+# The plugin passes its settings (/config → Rech) as these options. A value that is
+# empty or still reads `${user_config.…}` (Claude Code leaves settings nobody saved
+# unsubstituted) counts as unset. Then the environment applies: RECH_LANGUAGE,
+# RECH_LISTEN_PAUSE, RECH_LISTEN_DEVICE, RECH_LISTEN_SOUNDS (0 = off), RECH_BIN.
+#
+# /rech:setup saves its choices in DIR (the plugin's data directory): `language`,
+# used when neither the plugin setting nor RECH_LANGUAGE gives one, and
+# `microphone`, which is free text a skill line cannot quote safely and so is not a
+# plugin setting at all (RECH_LISTEN_DEVICE and --device override it).
+set -uo pipefail
+
+for_prompt=0
+language="${RECH_LANGUAGE:-}"
+pause="${RECH_LISTEN_PAUSE:-}"
+device="${RECH_LISTEN_DEVICE:-}"
+sounds="${RECH_LISTEN_SOUNDS:-1}"
+data_dir=""
+passthrough=()
+
+# A plugin setting that was not substituted, or left empty, is unset.
+is_set() { [[ -n "$1" && "$1" != *'${'* ]]; }
+
+while (( $# )); do
+  case "$1" in
+    --for-prompt) for_prompt=1 ;;
+    --language) is_set "${2:-}" && language="$2"; shift ;;
+    --pause) is_set "${2:-}" && pause="$2"; shift ;;
+    --device) is_set "${2:-}" && device="$2"; shift ;;
+    --sounds) is_set "${2:-}" && sounds="$2"; shift ;;
+    --data) is_set "${2:-}" && data_dir="$2"; shift ;;
+    *) passthrough+=("$1") ;;
+  esac
+  shift
+done
+
+if [[ -n "$data_dir" ]]; then
+  if [[ -z "$language" && -s "$data_dir/language" ]]; then language="$(head -n 1 "$data_dir/language")"; fi
+  if [[ -z "$device" && -s "$data_dir/microphone" ]]; then device="$(head -n 1 "$data_dir/microphone")"; fi
+fi
+
+if (( for_prompt )); then
+  log="$HOME/Library/Logs/rech-listen.log"
+  mkdir -p "$(dirname "$log")"
+  exec 2>>"$log"
+  printf '\n== %s\n' "$(date '+%F %T')" >&2
+fi
+
+# Ends the run. Exit code 3 means nothing was heard.
+finish() {
+  local code="$1" message="$2"
+  printf 'rech-listen: %s\n' "$message" >&2
+  if (( for_prompt )); then
+    printf '[rech-listen: %s]\n' "$message"
+    exit 0
+  fi
+  exit "$code"
+}
+
+# rech before 0.4 has no `listen` (and answers `listen --help` with its own help).
+has_listen() { "$rech_bin" --help 2>&1 | grep -q '^  listen '; }
+
+rech_bin="${RECH_BIN:-$(command -v rech || true)}"
+if [[ -z "$rech_bin" && -x /opt/homebrew/bin/rech ]]; then
+  rech_bin=/opt/homebrew/bin/rech
+fi
+if [[ -z "$rech_bin" ]]; then
+  finish 1 "rech is not installed: brew install bshk-app/tap/rech, then /rech:setup"
+fi
+
+args=(listen)
+if [[ -n "$language" ]]; then args+=(--language "$language"); fi
+if [[ -n "$pause" ]]; then args+=(--pause "$pause"); fi
+if [[ -n "$device" ]]; then args+=(--device "$device"); fi
+case "$sounds" in 0|false|no|off) args+=(--no-sounds) ;; esac
+args+=(${passthrough[@]+"${passthrough[@]}"})
+
+if (( ! for_prompt )); then
+  # A person at a terminal: rech shows its own progress and errors.
+  "$rech_bin" "${args[@]}"
+  code=$?
+  if (( code == 64 )) && ! has_listen; then
+    finish 1 "this rech has no 'listen': brew upgrade rech"
+  fi
+  exit "$code"
+fi
+
+errors="$(mktemp)"
+trap 'rm -f "$errors"' EXIT
+"$rech_bin" "${args[@]}" 2>"$errors"
+code=$?
+cat "$errors" >&2   # into the log
+
+case "$code" in
+  0) exit 0 ;;
+  3) finish 3 "nothing heard" ;;
+  64)
+    if ! has_listen; then
+      finish 1 "this rech has no 'listen': brew upgrade rech"
+    fi
+    ;;
+esac
+finish 1 "$(grep -v -e '^\[rech\]' -e '^$' "$errors" | tail -n 1 | sed -E 's/^Error: //')"
